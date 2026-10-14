@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PTP開封音 収集ツール</title>
+</head>
+<body>
+    <h2>PTP開封音 データ収集</h2>
+    <button id="startBtn" style="font-size: 20px; padding: 10px 20px;">録音開始</button>
+    <button id="eventBtn" style="font-size: 30px; padding: 30px; background-color: red; color: white;" disabled>
+        今、薬を開けました！
+    </button>
+    <button id="stopBtn" style="font-size: 20px; padding: 10px 20px;" disabled>録音終了・送信</button>
+
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+        let eventTimestamps = [];
+        let startTime;
+
+        document.getElementById('startBtn').onclick = async () => {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            mediaRecorder = new MediaRecorder(stream);
+            
+            mediaRecorder.ondataavailable = event => audioChunks.push(event.data);
+            mediaRecorder.onstop = sendDataToServer;
+
+            audioChunks = [];
+            eventTimestamps = [];
+            startTime = Date.now();
+            
+            mediaRecorder.start();
+            document.getElementById('startBtn').disabled = true;
+            document.getElementById('eventBtn').disabled = false;
+            document.getElementById('stopBtn').disabled = false;
+        };
+
+        // 「開封」ボタンが押された相対時間（ミリ秒）を記録
+        document.getElementById('eventBtn').onclick = () => {
+            const elapsedMs = Date.now() - startTime;
+            eventTimestamps.push(elapsedMs);
+            alert(`イベント記録: ${elapsedMs / 1000} 秒地点`);
+        };
+
+        document.getElementById('stopBtn').onclick = () => {
+            mediaRecorder.stop();
+            document.getElementById('startBtn').disabled = false;
+            document.getElementById('eventBtn').disabled = true;
+            document.getElementById('stopBtn').disabled = true;
+        };
+
+        async function sendDataToServer() {
+            const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+            const formData = new FormData();
+            formData.append('audio', audioBlob, `rec_${Date.now()}.wav`);
+            formData.append('timestamps', JSON.stringify(eventTimestamps));
+
+            await fetch('/upload', { method: 'POST', body: formData });
+            alert('送信完了しました！ご協力ありがとうございます。');
+        }
+    </script>
+</body>
+</html>
